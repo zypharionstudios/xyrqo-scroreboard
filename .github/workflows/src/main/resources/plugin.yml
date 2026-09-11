@@ -1,0 +1,33 @@
+name: XyrqoPlugin
+version: 1.0
+main: de.xyrqo.plugin.XyrqoPlugin
+api-version: '1.21'
+author: Xyrqo
+description: XyrqoSMP Plugin
+
+commands:
+  sell:
+    description: Verkauft Items
+    usage: /sell
+  balance:
+    description: Zeigt Guthaben
+    usage: /balance [spieler]
+    aliases: [bal, money, geld]
+  balreset:
+    description: Setzt Guthaben zurück
+    usage: /balreset <spieler>
+    permission: xyrqo.balreset
+  rank:
+    description: Setzt einen Rang
+    usage: /rank <spieler> <rang>
+    permission: xyrqo.rank
+  unrank:
+    description: Entfernt einen Rang
+    usage: /unrank <spieler>
+    permission: xyrqo.rank
+
+permissions:
+  xyrqo.balreset:
+    default: op
+  xyrqo.rank:
+    default: op
