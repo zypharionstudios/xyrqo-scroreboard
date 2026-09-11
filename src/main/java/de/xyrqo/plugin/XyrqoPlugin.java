@@ -5,10 +5,12 @@ import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -65,7 +67,7 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         getCommand("unrank").setExecutor(uc);
         getCommand("unrank").setTabCompleter(uc);
 
-        getLogger().info("XyrqoPlugin v1.2 aktiviert!");
+        getLogger().info("XyrqoPlugin v1.3 aktiviert!");
 
         new BukkitRunnable() {
             @Override
@@ -83,17 +85,11 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         if (ranks != null) ranks.save();
     }
 
-    /**
-     * Erzwingt sofortiges Update aller Spieler.
-     * Wird von RankCommand/UnrankCommand nach dem Setzen aufgerufen.
-     */
     public void refreshAllPlayers() {
-        // Erst alle Spielernamen in der Tab-Liste neu setzen
         for (Player p : Bukkit.getOnlinePlayers()) {
             Rank r = ranks.getRank(p.getUniqueId());
             p.setPlayerListName(r != null ? r.getTabPrefix() + p.getName() : "§7" + p.getName());
         }
-        // Dann alle Scoreboards neu bauen
         for (Player p : Bukkit.getOnlinePlayers()) {
             update(p);
         }
@@ -106,6 +102,17 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
                 update(p);
             }
         }, 20L);
+    }
+
+    // NEU: Sofort nach Respawn alle Scoreboards neu bauen
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onRespawn(PlayerRespawnEvent e) {
+        // 1 Tick später, damit der Spieler wirklich in der Welt ist
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                update(p);
+            }
+        }, 1L);
     }
 
     @EventHandler
@@ -189,7 +196,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
             score--;
         }
 
-        // Alle Spieler in Rang-Teams eintragen (für Nametag über dem Kopf)
         for (Player target : Bukkit.getOnlinePlayers()) {
             Rank targetRank = ranks.getRank(target.getUniqueId());
 
@@ -223,7 +229,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
 
         viewer.setScoreboard(board);
 
-        // Tab-Name des Viewers
         viewer.setPlayerListName(viewerRank != null
                 ? viewerRank.getTabPrefix() + viewer.getName()
                 : "§7" + viewer.getName());
