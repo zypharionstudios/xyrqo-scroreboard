@@ -10,7 +10,15 @@ commands:
     description: Verkauft Items
     usage: /sell
   balance:
-    descr
+    description: Zeigt Guthaben
+    usage: /balance [spieler]
+    aliases: [bal, money, geld]
+  balreset:
+    description: Setzt Guthaben zurück
+    usage: /balreset <spieler>
+    permission: xyrqo.balreset
+  rank:
+    description: Setzt einen Rang
     usage: /rank <spieler> <rang>
     permission: xyrqo.rank
   unrank:
