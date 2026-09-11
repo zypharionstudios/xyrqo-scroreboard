@@ -14,9 +14,11 @@ import java.util.List;
 public class RankCommand implements CommandExecutor, TabCompleter {
 
     private final RankManager ranks;
+    private final XyrqoPlugin plugin;
 
-    public RankCommand(RankManager ranks) {
+    public RankCommand(RankManager ranks, XyrqoPlugin plugin) {
         this.ranks = ranks;
+        this.plugin = plugin;
     }
 
     @Override
@@ -41,8 +43,14 @@ public class RankCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("§5§l✦ §7Verfügbar: " + Rank.listAll());
             return true;
         }
+
         ranks.setRank(target.getUniqueId(), rank);
+
+        // SOFORT alle Spieler updaten (Tab + Nametag + Scoreboard)
+        plugin.refreshAllPlayers();
+
         sender.sendMessage("§5§l✦ §aRang gesetzt: §f" + target.getName() + " §7→ " + rank.getDisplay());
+
         Player online = target.getPlayer();
         if (online != null) {
             online.sendMessage("§5§l✦ §7Du hast den Rang " + rank.getDisplay() + " §7erhalten!");
