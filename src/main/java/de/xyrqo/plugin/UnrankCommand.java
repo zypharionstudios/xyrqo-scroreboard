@@ -14,9 +14,11 @@ import java.util.List;
 public class UnrankCommand implements CommandExecutor, TabCompleter {
 
     private final RankManager ranks;
+    private final XyrqoPlugin plugin;
 
-    public UnrankCommand(RankManager ranks) {
+    public UnrankCommand(RankManager ranks, XyrqoPlugin plugin) {
         this.ranks = ranks;
+        this.plugin = plugin;
     }
 
     @Override
@@ -39,8 +41,14 @@ public class UnrankCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("§5§l✦ §c" + target.getName() + " hat keinen Rang.");
             return true;
         }
+
         ranks.removeRank(target.getUniqueId());
+
+        // SOFORT alle Spieler updaten
+        plugin.refreshAllPlayers();
+
         sender.sendMessage("§5§l✦ §aRang entfernt von §f" + target.getName() + " §7(war: " + current.getDisplay() + "§7)");
+
         Player online = target.getPlayer();
         if (online != null) {
             online.sendMessage("§5§l✦ §cDein Rang wurde entfernt.");
