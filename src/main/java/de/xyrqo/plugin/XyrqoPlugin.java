@@ -57,15 +57,15 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         getCommand("balreset").setExecutor(reset);
         getCommand("balreset").setTabCompleter(reset);
 
-        RankCommand rc = new RankCommand(ranks);
+        RankCommand rc = new RankCommand(ranks, this);
         getCommand("rank").setExecutor(rc);
         getCommand("rank").setTabCompleter(rc);
 
-        UnrankCommand uc = new UnrankCommand(ranks);
+        UnrankCommand uc = new UnrankCommand(ranks, this);
         getCommand("unrank").setExecutor(uc);
         getCommand("unrank").setTabCompleter(uc);
 
-        getLogger().info("XyrqoPlugin v1.1 aktiviert!");
+        getLogger().info("XyrqoPlugin v1.2 aktiviert!");
 
         new BukkitRunnable() {
             @Override
@@ -83,10 +83,25 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         if (ranks != null) ranks.save();
     }
 
+    /**
+     * Erzwingt sofortiges Update aller Spieler.
+     * Wird von RankCommand/UnrankCommand nach dem Setzen aufgerufen.
+     */
+    public void refreshAllPlayers() {
+        // Erst alle Spielernamen in der Tab-Liste neu setzen
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            Rank r = ranks.getRank(p.getUniqueId());
+            p.setPlayerListName(r != null ? r.getTabPrefix() + p.getName() : "§7" + p.getName());
+        }
+        // Dann alle Scoreboards neu bauen
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            update(p);
+        }
+    }
+
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
         Bukkit.getScheduler().runTaskLater(this, () -> {
-            // Alle Spieler updaten, damit jeder den neuen sieht
             for (Player p : Bukkit.getOnlinePlayers()) {
                 update(p);
             }
@@ -97,7 +112,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
     public void onQuit(PlayerQuitEvent e) {
         economy.save();
         ranks.save();
-        // Anderen Spielern Bescheid geben
         Bukkit.getScheduler().runTaskLater(this, () -> {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 update(p);
@@ -153,7 +167,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         ScoreboardManager mgr = Bukkit.getScoreboardManager();
         Scoreboard board = mgr.getNewScoreboard();
 
-        // 1) Sidebar aufbauen
         Objective obj = board.registerNewObjective("xyrqo", "dummy", "§5§l✦ §d§lXyrqoSMP §5§l✦");
         obj.setDisplaySlot(DisplaySlot.SIDEBAR);
 
@@ -176,13 +189,11 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
             score--;
         }
 
-        // 2) Alle Spieler in Rang-Teams dieses Scoreboards eintragen
-        //    → dadurch sieht DER VIEWER den Rang über allen Köpfen
+        // Alle Spieler in Rang-Teams eintragen (für Nametag über dem Kopf)
         for (Player target : Bukkit.getOnlinePlayers()) {
             Rank targetRank = ranks.getRank(target.getUniqueId());
 
             if (targetRank == null) {
-                // Ohne Rang: aus allen Teams raus
                 for (Rank r : Rank.values()) {
                     Team t = board.getTeam("r_" + r.getId());
                     if (t != null && t.hasEntry(target.getName())) {
@@ -192,7 +203,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
                 continue;
             }
 
-            // Aus anderen Rang-Teams entfernen
             for (Rank r : Rank.values()) {
                 if (r == targetRank) continue;
                 Team other = board.getTeam("r_" + r.getId());
@@ -201,7 +211,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
                 }
             }
 
-            // In eigenes Rang-Team eintragen
             Team team = board.getTeam("r_" + targetRank.getId());
             if (team == null) {
                 team = board.registerNewTeam("r_" + targetRank.getId());
@@ -212,8 +221,9 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
             }
         }
 
-        // 3) Tab-Liste setzen
         viewer.setScoreboard(board);
+
+        // Tab-Name des Viewers
         viewer.setPlayerListName(viewerRank != null
                 ? viewerRank.getTabPrefix() + viewer.getName()
                 : "§7" + viewer.getName());
