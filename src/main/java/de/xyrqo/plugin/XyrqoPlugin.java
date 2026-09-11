@@ -65,15 +65,13 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         getCommand("unrank").setExecutor(uc);
         getCommand("unrank").setTabCompleter(uc);
 
-        getLogger().info("XyrqoPlugin aktiviert!");
+        getLogger().info("XyrqoPlugin v1.1 aktiviert!");
 
         new BukkitRunnable() {
             @Override
             public void run() {
                 for (Player p : Bukkit.getOnlinePlayers()) {
                     update(p);
-                    updateTab(p);
-                    applyNametag(p);
                 }
             }
         }.runTaskTimer(this, 0L, 20L);
@@ -88,17 +86,23 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
         Bukkit.getScheduler().runTaskLater(this, () -> {
-            update(e.getPlayer());
-            updateTab(e.getPlayer());
-            applyNametag(e.getPlayer());
+            // Alle Spieler updaten, damit jeder den neuen sieht
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                update(p);
+            }
         }, 20L);
     }
 
     @EventHandler
     public void onQuit(PlayerQuitEvent e) {
-        e.getPlayer().setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
         economy.save();
         ranks.save();
+        // Anderen Spielern Bescheid geben
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                update(p);
+            }
+        }, 1L);
     }
 
     @EventHandler
@@ -145,24 +149,25 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         }
     }
 
-    private void update(Player player) {
+    private void update(Player viewer) {
         ScoreboardManager mgr = Bukkit.getScoreboardManager();
         Scoreboard board = mgr.getNewScoreboard();
 
+        // 1) Sidebar aufbauen
         Objective obj = board.registerNewObjective("xyrqo", "dummy", "§5§l✦ §d§lXyrqoSMP §5§l✦");
         obj.setDisplaySlot(DisplaySlot.SIDEBAR);
 
-        int ping = player.getPing();
+        int ping = viewer.getPing();
         String pingColor = ping < 50 ? "§a" : ping < 100 ? "§e" : ping < 200 ? "§6" : "§c";
-        String money = moneyFormat.format(economy.getBalance(player.getUniqueId()));
+        String money = moneyFormat.format(economy.getBalance(viewer.getUniqueId()));
 
-        Rank rank = ranks.getRank(player.getUniqueId());
-        String rankDisplay = rank != null ? rank.getDisplay() : "§7Spieler";
+        Rank viewerRank = ranks.getRank(viewer.getUniqueId());
+        String rankDisplay = viewerRank != null ? viewerRank.getDisplay() : "§7Spieler";
 
         int score = LINES.length;
         for (String template : LINES) {
             String text = template
-                .replace("%player%", player.getName())
+                .replace("%player%", viewer.getName())
                 .replace("%online%", String.valueOf(Bukkit.getOnlinePlayers().size()))
                 .replace("%ping%", pingColor + ping)
                 .replace("%money%", money)
@@ -171,7 +176,53 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
             score--;
         }
 
-        player.setScoreboard(board);
+        // 2) Alle Spieler in Rang-Teams dieses Scoreboards eintragen
+        //    → dadurch sieht DER VIEWER den Rang über allen Köpfen
+        for (Player target : Bukkit.getOnlinePlayers()) {
+            Rank targetRank = ranks.getRank(target.getUniqueId());
+
+            if (targetRank == null) {
+                // Ohne Rang: aus allen Teams raus
+                for (Rank r : Rank.values()) {
+                    Team t = board.getTeam("r_" + r.getId());
+                    if (t != null && t.hasEntry(target.getName())) {
+                        t.removeEntry(target.getName());
+                    }
+                }
+                continue;
+            }
+
+            // Aus anderen Rang-Teams entfernen
+            for (Rank r : Rank.values()) {
+                if (r == targetRank) continue;
+                Team other = board.getTeam("r_" + r.getId());
+                if (other != null && other.hasEntry(target.getName())) {
+                    other.removeEntry(target.getName());
+                }
+            }
+
+            // In eigenes Rang-Team eintragen
+            Team team = board.getTeam("r_" + targetRank.getId());
+            if (team == null) {
+                team = board.registerNewTeam("r_" + targetRank.getId());
+                team.setPrefix(targetRank.getTabPrefix());
+            }
+            if (!team.hasEntry(target.getName())) {
+                team.addEntry(target.getName());
+            }
+        }
+
+        // 3) Tab-Liste setzen
+        viewer.setScoreboard(board);
+        viewer.setPlayerListName(viewerRank != null
+                ? viewerRank.getTabPrefix() + viewer.getName()
+                : "§7" + viewer.getName());
+
+        String header = "\n§5§l✦ §d§lXyrqoSMP §5§l✦\n§7Willkommen, §f" + viewer.getName() + "\n";
+        String footer = "\n§d§l► §fOnline: §e" + Bukkit.getOnlinePlayers().size()
+                      + "\n§d§l► §fxyrqosmp.tkmc.net\n";
+
+        viewer.setPlayerListHeaderFooter(header, footer);
     }
 
     private void setLine(Scoreboard board, Objective obj, String text, int score) {
@@ -194,41 +245,5 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
             team.setSuffix(suffix.length() > 16 ? suffix.substring(0, 16) : suffix);
         }
         obj.getScore(entry).setScore(score);
-    }
-
-    private void updateTab(Player player) {
-        Rank rank = ranks.getRank(player.getUniqueId());
-        String tabPrefix = rank != null ? rank.getTabPrefix() : "§7";
-        String coloredName = tabPrefix + player.getName();
-        player.setPlayerListName(coloredName);
-
-        String header = "\n§5§l✦ §d§lXyrqoSMP §5§l✦\n§7Willkommen, " + coloredName + "\n";
-        String footer = "\n§d§l► §fOnline: §e" + Bukkit.getOnlinePlayers().size()
-                      + "\n§d§l► §fxyrqosmp.tkmc.net\n";
-
-        player.setPlayerListHeaderFooter(header, footer);
-    }
-
-    private void applyNametag(Player player) {
-        Scoreboard main = Bukkit.getScoreboardManager().getMainScoreboard();
-        Rank rank = ranks.getRank(player.getUniqueId());
-
-        for (Rank r : Rank.values()) {
-            Team t = main.getTeam("rank_" + r.getId());
-            if (t != null && t.hasEntry(player.getName())) {
-                t.removeEntry(player.getName());
-            }
-        }
-
-        if (rank == null) return;
-
-        Team team = main.getTeam("rank_" + rank.getId());
-        if (team == null) {
-            team = main.registerNewTeam("rank_" + rank.getId());
-            team.setPrefix(rank.getTabPrefix());
-        }
-        if (!team.hasEntry(player.getName())) {
-            team.addEntry(player.getName());
-        }
     }
 }
