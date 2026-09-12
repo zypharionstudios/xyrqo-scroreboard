@@ -25,16 +25,14 @@ commands:
     description: Entfernt einen Rang
     usage: /unrank <spieler>
     permission: xyrqo.rank
-  npc-load:
+  npcload:
     description: Erstellt einen RTP NPC
-    usage: /npc-load
+    usage: /npcload
     permission: xyrqo.npc
-    aliases: [npcload]
-  npc-remove:
+  npcremove:
     description: Entfernt alle NPCs
-    usage: /npc-remove
+    usage: /npcremove
     permission: xyrqo.npc
-    aliases: [npc-remove, npcremove]
 
 permissions:
   xyrqo.balreset:
