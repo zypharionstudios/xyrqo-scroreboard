@@ -12,10 +12,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.player.PlayerInteractEntityEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -25,7 +22,9 @@ import org.bukkit.scoreboard.*;
 
 import java.text.DecimalFormat;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 public class XyrqoPlugin extends JavaPlugin implements Listener {
 
@@ -33,6 +32,9 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
     private RankManager ranks;
     private NpcManager npcManager;
     private final DecimalFormat moneyFormat = new DecimalFormat("#,##0.00");
+
+    // Laufende RTP-Countdowns (damit wir sie bei Bewegung abbrechen können)
+    private final Map<UUID, BukkitRunnable> rtpTasks = new HashMap<>();
 
     private static final String[] LINES = {
         "§5§m━━━━━━━━━━━━━━━━",
@@ -81,7 +83,7 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         if (getCommand("npcload") != null) getCommand("npcload").setExecutor(nc);
         if (getCommand("npcremove") != null) getCommand("npcremove").setExecutor(nc);
 
-        getLogger().info("XyrqoPlugin v1.4 aktiviert!");
+        getLogger().info("XyrqoPlugin v1.5 aktiviert!");
 
         new BukkitRunnable() {
             @Override
@@ -133,11 +135,40 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         economy.save();
         ranks.save();
         npcManager.save();
+
+        // RTP-Task canceln, falls noch aktiv
+        BukkitRunnable task = rtpTasks.remove(e.getPlayer().getUniqueId());
+        if (task != null) task.cancel();
+
         Bukkit.getScheduler().runTaskLater(this, () -> {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 update(p);
             }
         }, 1L);
+    }
+
+    // ============== BEWEGUNG BRICHT RTP-COUNTDOWN AB ==============
+    @EventHandler
+    public void onPlayerMove(PlayerMoveEvent e) {
+        Player p = e.getPlayer();
+        if (!rtpTasks.containsKey(p.getUniqueId())) return;
+
+        Location from = e.getFrom();
+        Location to = e.getTo();
+        if (to == null) return;
+
+        // Blockposition vergleichen (Kopfdrehung ignorieren)
+        if (from.getBlockX() != to.getBlockX()
+                || from.getBlockY() != to.getBlockY()
+                || from.getBlockZ() != to.getBlockZ()) {
+
+            BukkitRunnable task = rtpTasks.remove(p.getUniqueId());
+            if (task != null) task.cancel();
+
+            p.sendActionBar("§c§lRTP abgebrochen!");
+            p.sendMessage("§5§l✦ §cRTP abgebrochen – du hast dich bewegt!");
+            p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1f, 0.8f);
+        }
     }
 
     // ================= NPC KLICK (Rechtsklick) =================
@@ -196,18 +227,32 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
     }
 
     private void startRtpCountdown(Player player) {
-        new BukkitRunnable() {
+        // Falls schon ein Countdown läuft: alten abbrechen
+        BukkitRunnable old = rtpTasks.remove(player.getUniqueId());
+        if (old != null) old.cancel();
+
+        BukkitRunnable task = new BukkitRunnable() {
             int count = 5;
 
             @Override
             public void run() {
+                if (!player.isOnline()) {
+                    rtpTasks.remove(player.getUniqueId());
+                    cancel();
+                    return;
+                }
+
                 if (count > 0) {
                     player.sendActionBar("§d§l► §fRTP in §e§l" + count + "§f...");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_HAT, 1f, 1f);
                     count--;
                 } else {
+                    // Teleport
                     Location safe = RtpManager.findSafeLocation(player.getWorld());
                     if (safe != null) {
+                        // Chunk sicherstellen
+                        safe.getChunk().load();
+
                         player.teleport(safe);
                         player.sendMessage("§5§l✦ §aDu wurdest zufällig teleportiert!");
                         player.sendTitle("§d§lRTP", "§7Willkommen am neuen Ort!", 10, 40, 10);
@@ -216,10 +261,14 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
                         player.sendMessage("§5§l✦ §cKein sicherer Ort gefunden. Versuch es nochmal!");
                         player.sendActionBar("§c§lRTP fehlgeschlagen");
                     }
+                    rtpTasks.remove(player.getUniqueId());
                     cancel();
                 }
             }
-        }.runTaskTimer(this, 0L, 20L);
+        };
+
+        rtpTasks.put(player.getUniqueId(), task);
+        task.runTaskTimer(this, 0L, 20L);
     }
 
     // ================= SELL GUI =================
