@@ -30,11 +30,11 @@ public class NpcCommand implements CommandExecutor {
 
         if (cmd.getName().equalsIgnoreCase("npcremove")) {
             npcManager.removeAll();
-            p.sendMessage("§5§l✦ §aAlle NPCs entfernt.");
+            p.sendMessage("§5§l✦ §aAlle RTP-NPCs entfernt.");
             return true;
         }
 
-        // /npcload
+        // /npcload → NPC mit festem Namen "§e§lRTP" spawnen
         Location loc = p.getLocation();
         npcManager.spawnNpc(loc, "§e§lRTP");
         p.sendMessage("§5§l✦ §aRTP-NPC wurde erstellt!");
