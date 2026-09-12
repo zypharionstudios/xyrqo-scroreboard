@@ -1,6 +1,5 @@
 package de.xyrqo.plugin;
 
-import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -29,13 +28,13 @@ public class NpcCommand implements CommandExecutor {
 
         Player p = (Player) sender;
 
-        if (cmd.getName().equalsIgnoreCase("npc-remove")) {
+        if (cmd.getName().equalsIgnoreCase("npcremove")) {
             npcManager.removeAll();
             p.sendMessage("§5§l✦ §aAlle NPCs entfernt.");
             return true;
         }
 
-        // /npc-load
+        // /npcload
         Location loc = p.getLocation();
         npcManager.spawnNpc(loc, "§e§lRTP");
         p.sendMessage("§5§l✦ §aRTP-NPC wurde erstellt!");
