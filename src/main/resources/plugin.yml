@@ -1,5 +1,5 @@
 name: XyrqoPlugin
-version: 1.0
+version: 1.4
 main: de.xyrqo.plugin.XyrqoPlugin
 api-version: '1.21'
 author: Xyrqo
@@ -25,9 +25,19 @@ commands:
     description: Entfernt einen Rang
     usage: /unrank <spieler>
     permission: xyrqo.rank
+  npcload:
+    description: Erstellt einen RTP NPC
+    usage: /npcload
+    permission: xyrqo.npc
+  npcremove:
+    description: Entfernt alle NPCs
+    usage: /npcremove
+    permission: xyrqo.npc
 
 permissions:
   xyrqo.balreset:
     default: op
   xyrqo.rank:
+    default: op
+  xyrqo.npc:
     default: op
