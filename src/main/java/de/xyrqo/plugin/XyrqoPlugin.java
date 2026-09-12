@@ -33,7 +33,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
     private NpcManager npcManager;
     private final DecimalFormat moneyFormat = new DecimalFormat("#,##0.00");
 
-    // Laufende RTP-Countdowns (damit wir sie bei Bewegung abbrechen können)
     private final Map<UUID, BukkitRunnable> rtpTasks = new HashMap<>();
 
     private static final String[] LINES = {
@@ -136,7 +135,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         ranks.save();
         npcManager.save();
 
-        // RTP-Task canceln, falls noch aktiv
         BukkitRunnable task = rtpTasks.remove(e.getPlayer().getUniqueId());
         if (task != null) task.cancel();
 
@@ -147,7 +145,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         }, 1L);
     }
 
-    // ============== BEWEGUNG BRICHT RTP-COUNTDOWN AB ==============
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent e) {
         Player p = e.getPlayer();
@@ -157,7 +154,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         Location to = e.getTo();
         if (to == null) return;
 
-        // Blockposition vergleichen (Kopfdrehung ignorieren)
         if (from.getBlockX() != to.getBlockX()
                 || from.getBlockY() != to.getBlockY()
                 || from.getBlockZ() != to.getBlockZ()) {
@@ -171,7 +167,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         }
     }
 
-    // ================= NPC KLICK (Rechtsklick) =================
     @EventHandler
     public void onNpcRightClick(PlayerInteractEntityEvent e) {
         if (!npcManager.isNpc(e.getRightClicked())) return;
@@ -179,7 +174,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         openRtpMenu(e.getPlayer());
     }
 
-    // ================= NPC KLICK (Linksklick / Schlagen) =================
     @EventHandler
     public void onNpcLeftClick(EntityDamageByEntityEvent e) {
         Entity damager = e.getDamager();
@@ -227,7 +221,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
     }
 
     private void startRtpCountdown(Player player) {
-        // Falls schon ein Countdown läuft: alten abbrechen
         BukkitRunnable old = rtpTasks.remove(player.getUniqueId());
         if (old != null) old.cancel();
 
@@ -246,24 +239,32 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
                     player.sendActionBar("§d§l► §fRTP in §e§l" + count + "§f...");
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_HAT, 1f, 1f);
                     count--;
-                } else {
-                    // Teleport
-                    Location safe = RtpManager.findSafeLocation(player.getWorld());
-                    if (safe != null) {
-                        // Chunk sicherstellen
-                        safe.getChunk().load();
+                    return;
+                }
 
-                        player.teleport(safe);
-                        player.sendMessage("§5§l✦ §aDu wurdest zufällig teleportiert!");
-                        player.sendTitle("§d§lRTP", "§7Willkommen am neuen Ort!", 10, 40, 10);
-                        player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f);
-                    } else {
+                rtpTasks.remove(player.getUniqueId());
+                cancel();
+
+                player.sendActionBar("§d§l► §fSuche sicheren Ort...");
+                RtpManager.findSafeLocationAsync(XyrqoPlugin.this, player, loc -> {
+                    if (!player.isOnline()) return;
+
+                    if (loc == null) {
                         player.sendMessage("§5§l✦ §cKein sicherer Ort gefunden. Versuch es nochmal!");
                         player.sendActionBar("§c§lRTP fehlgeschlagen");
+                        return;
                     }
-                    rtpTasks.remove(player.getUniqueId());
-                    cancel();
-                }
+
+                    player.teleportAsync(loc).thenAccept(success -> {
+                        if (success && player.isOnline()) {
+                            player.sendMessage("§5§l✦ §aDu wurdest zufällig teleportiert!");
+                            player.sendTitle("§d§lRTP", "§7Willkommen am neuen Ort!", 10, 40, 10);
+                            player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f);
+                        } else if (player.isOnline()) {
+                            player.sendMessage("§5§l✦ §cTeleport fehlgeschlagen. Versuch es nochmal!");
+                        }
+                    });
+                });
             }
         };
 
@@ -271,7 +272,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         task.runTaskTimer(this, 0L, 20L);
     }
 
-    // ================= SELL GUI =================
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent e) {
         if (!(e.getInventory().getHolder() instanceof SellGUI)) return;
@@ -316,7 +316,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         }
     }
 
-    // ================= SCOREBOARD =================
     private void update(Player viewer) {
         ScoreboardManager mgr = Bukkit.getScoreboardManager();
         Scoreboard board = mgr.getNewScoreboard();
