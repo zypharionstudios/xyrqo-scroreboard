@@ -78,8 +78,8 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         getCommand("unrank").setTabCompleter(uc);
 
         NpcCommand nc = new NpcCommand(npcManager);
-        getCommand("npc-load").setExecutor(nc);
-        getCommand("npc-remove").setExecutor(nc);
+        if (getCommand("npcload") != null) getCommand("npcload").setExecutor(nc);
+        if (getCommand("npcremove") != null) getCommand("npcremove").setExecutor(nc);
 
         getLogger().info("XyrqoPlugin v1.4 aktiviert!");
 
@@ -172,13 +172,12 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
             ));
             grass.setItemMeta(meta);
         }
-        inv.setItem(13, grass); // Slot 13 = Mitte von 3x9
+        inv.setItem(13, grass);
 
         player.openInventory(inv);
         player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, 1f, 1.2f);
     }
 
-    // ================= MENÜ KLICK =================
     @EventHandler
     public void onMenuClick(InventoryClickEvent e) {
         if (!(e.getInventory().getHolder() instanceof RtpGUI)) return;
@@ -190,11 +189,9 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         if (e.getCurrentItem() == null) return;
         if (e.getCurrentItem().getType() != Material.GRASS_BLOCK) return;
 
-        // Menü schließen
         p.closeInventory();
         p.playSound(p.getLocation(), Sound.BLOCK_CHEST_CLOSE, 1f, 1.2f);
 
-        // RTP Countdown starten
         startRtpCountdown(p);
     }
 
@@ -209,7 +206,6 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
                     player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_HAT, 1f, 1f);
                     count--;
                 } else {
-                    // Teleportieren
                     Location safe = RtpManager.findSafeLocation(player.getWorld());
                     if (safe != null) {
                         player.teleport(safe);
