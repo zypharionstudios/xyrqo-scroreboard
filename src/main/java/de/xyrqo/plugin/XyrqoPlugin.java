@@ -1,28 +1,37 @@
 package de.xyrqo.plugin;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scoreboard.*;
 
 import java.text.DecimalFormat;
+import java.util.Arrays;
 import java.util.Map;
 
 public class XyrqoPlugin extends JavaPlugin implements Listener {
 
     private EconomyManager economy;
     private RankManager ranks;
+    private NpcManager npcManager;
     private final DecimalFormat moneyFormat = new DecimalFormat("#,##0.00");
 
     private static final String[] LINES = {
@@ -50,6 +59,7 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
     public void onEnable() {
         economy = new EconomyManager(this);
         ranks = new RankManager(this);
+        npcManager = new NpcManager(this);
         getServer().getPluginManager().registerEvents(this, this);
 
         getCommand("sell").setExecutor(new SellCommand(economy));
@@ -67,7 +77,11 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         getCommand("unrank").setExecutor(uc);
         getCommand("unrank").setTabCompleter(uc);
 
-        getLogger().info("XyrqoPlugin v1.3 aktiviert!");
+        NpcCommand nc = new NpcCommand(npcManager);
+        getCommand("npc-load").setExecutor(nc);
+        getCommand("npc-remove").setExecutor(nc);
+
+        getLogger().info("XyrqoPlugin v1.4 aktiviert!");
 
         new BukkitRunnable() {
             @Override
@@ -83,6 +97,7 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
     public void onDisable() {
         if (economy != null) economy.save();
         if (ranks != null) ranks.save();
+        if (npcManager != null) npcManager.save();
     }
 
     public void refreshAllPlayers() {
@@ -104,10 +119,8 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         }, 20L);
     }
 
-    // NEU: Sofort nach Respawn alle Scoreboards neu bauen
     @EventHandler(priority = EventPriority.MONITOR)
     public void onRespawn(PlayerRespawnEvent e) {
-        // 1 Tick später, damit der Spieler wirklich in der Welt ist
         Bukkit.getScheduler().runTaskLater(this, () -> {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 update(p);
@@ -119,6 +132,7 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
     public void onQuit(PlayerQuitEvent e) {
         economy.save();
         ranks.save();
+        npcManager.save();
         Bukkit.getScheduler().runTaskLater(this, () -> {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 update(p);
@@ -126,6 +140,93 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         }, 1L);
     }
 
+    // ================= NPC KLICK (Rechtsklick) =================
+    @EventHandler
+    public void onNpcRightClick(PlayerInteractEntityEvent e) {
+        if (!npcManager.isNpc(e.getRightClicked())) return;
+        e.setCancelled(true);
+        openRtpMenu(e.getPlayer());
+    }
+
+    // ================= NPC KLICK (Linksklick / Schlagen) =================
+    @EventHandler
+    public void onNpcLeftClick(EntityDamageByEntityEvent e) {
+        Entity damager = e.getDamager();
+        if (!(damager instanceof Player)) return;
+        if (!npcManager.isNpc(e.getEntity())) return;
+        e.setCancelled(true);
+        openRtpMenu((Player) damager);
+    }
+
+    private void openRtpMenu(Player player) {
+        RtpGUI gui = new RtpGUI();
+        Inventory inv = gui.getInventory();
+
+        ItemStack grass = new ItemStack(Material.GRASS_BLOCK);
+        ItemMeta meta = grass.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName("§a§lOverworld");
+            meta.setLore(Arrays.asList(
+                "§7Klicke, um zufällig",
+                "§7in die Overworld zu teleportieren."
+            ));
+            grass.setItemMeta(meta);
+        }
+        inv.setItem(13, grass); // Slot 13 = Mitte von 3x9
+
+        player.openInventory(inv);
+        player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, 1f, 1.2f);
+    }
+
+    // ================= MENÜ KLICK =================
+    @EventHandler
+    public void onMenuClick(InventoryClickEvent e) {
+        if (!(e.getInventory().getHolder() instanceof RtpGUI)) return;
+        e.setCancelled(true);
+
+        if (!(e.getWhoClicked() instanceof Player)) return;
+        Player p = (Player) e.getWhoClicked();
+
+        if (e.getCurrentItem() == null) return;
+        if (e.getCurrentItem().getType() != Material.GRASS_BLOCK) return;
+
+        // Menü schließen
+        p.closeInventory();
+        p.playSound(p.getLocation(), Sound.BLOCK_CHEST_CLOSE, 1f, 1.2f);
+
+        // RTP Countdown starten
+        startRtpCountdown(p);
+    }
+
+    private void startRtpCountdown(Player player) {
+        new BukkitRunnable() {
+            int count = 5;
+
+            @Override
+            public void run() {
+                if (count > 0) {
+                    player.sendActionBar("§d§l► §fRTP in §e§l" + count + "§f...");
+                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_HAT, 1f, 1f);
+                    count--;
+                } else {
+                    // Teleportieren
+                    Location safe = RtpManager.findSafeLocation(player.getWorld());
+                    if (safe != null) {
+                        player.teleport(safe);
+                        player.sendMessage("§5§l✦ §aDu wurdest zufällig teleportiert!");
+                        player.sendTitle("§d§lRTP", "§7Willkommen am neuen Ort!", 10, 40, 10);
+                        player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f);
+                    } else {
+                        player.sendMessage("§5§l✦ §cKein sicherer Ort gefunden. Versuch es nochmal!");
+                        player.sendActionBar("§c§lRTP fehlgeschlagen");
+                    }
+                    cancel();
+                }
+            }
+        }.runTaskTimer(this, 0L, 20L);
+    }
+
+    // ================= SELL GUI =================
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent e) {
         if (!(e.getInventory().getHolder() instanceof SellGUI)) return;
@@ -170,6 +271,7 @@ public class XyrqoPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    // ================= SCOREBOARD =================
     private void update(Player viewer) {
         ScoreboardManager mgr = Bukkit.getScoreboardManager();
         Scoreboard board = mgr.getNewScoreboard();
